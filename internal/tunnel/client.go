@@ -31,6 +31,7 @@ const (
 	typeTunnelOpenAck = "tunnel_open_ack"
 	typeTunnelData    = "tunnel_data"
 	typeTunnelClose   = "tunnel_close"
+	typeTunnelWindow  = "tunnel_window"
 	typeTunnelStop    = "tunnel_stop"
 	typeTunnelReady   = "tunnel_ready"
 )
@@ -41,6 +42,10 @@ const (
 	inboxBuffer = 2048
 	writeWait   = 10 * time.Second
 	pongWait    = 70 * time.Second
+	// windowSize: créditos iniciales (bytes en vuelo) por stream y dirección. Mismo
+	// control de flujo que el agente: el emisor no lee más allá de la ventana sin
+	// crédito; el receptor concede crédito (tunnel_window) al drenar.
+	windowSize = 256 * 1024
 )
 
 type msg struct {
@@ -50,11 +55,13 @@ type msg struct {
 	Data       string `json:"data,omitempty"`
 	Error      string `json:"error,omitempty"`
 	OK         bool   `json:"ok,omitempty"`
+	FC         bool   `json:"fc,omitempty"`         // capacidad de control de flujo (open/open_ack)
 	Host       string `json:"host,omitempty"`       // backend→dest: a dónde hacer el dial
 	Port       int    `json:"port,omitempty"`       // backend→dest
 	LocalPort  int    `json:"local_port,omitempty"` // tunnel_ready
 	RemoteHost string `json:"remote_host,omitempty"`
 	RemotePort int    `json:"remote_port,omitempty"`
+	Bytes      int    `json:"bytes,omitempty"` // tunnel_window: crédito concedido
 	Timestamp  int64  `json:"timestamp,omitempty"`
 }
 
@@ -98,6 +105,11 @@ type stream struct {
 	stateMu   sync.Mutex
 	readDone  bool
 	writeDone bool
+
+	fc         bool // ambos extremos soportan créditos → gating activo
+	creditMu   sync.Mutex
+	creditCond *sync.Cond
+	sendCredit int
 }
 
 func (s *stream) abort() {
@@ -106,10 +118,52 @@ func (s *stream) abort() {
 		if s.conn != nil {
 			s.conn.Close()
 		}
+		if s.creditCond != nil {
+			s.creditCond.Broadcast()
+		}
 	})
 }
 
 func (s *stream) closeInbox() { s.inboxOnce.Do(func() { close(s.inbox) }) }
+
+// initFlow inicializa el control de flujo con la ventana completa.
+func (s *stream) initFlow() {
+	s.creditCond = sync.NewCond(&s.creditMu)
+	s.sendCredit = windowSize
+}
+
+// takeCredit bloquea hasta que haya crédito (o el stream termine) y reserva hasta
+// `max` bytes. Devuelve 0 si el stream está cerrado.
+func (s *stream) takeCredit(max int) int {
+	s.creditMu.Lock()
+	defer s.creditMu.Unlock()
+	for s.sendCredit <= 0 {
+		select {
+		case <-s.done:
+			return 0
+		default:
+		}
+		s.creditCond.Wait()
+	}
+	select {
+	case <-s.done:
+		return 0
+	default:
+	}
+	n := s.sendCredit
+	if n > max {
+		n = max
+	}
+	s.sendCredit -= n
+	return n
+}
+
+func (s *stream) addCredit(n int) {
+	s.creditMu.Lock()
+	s.sendCredit += n
+	s.creditMu.Unlock()
+	s.creditCond.Broadcast()
+}
 
 // New crea un cliente rol source (Tipo 1): escucha en localAddr y reenvía al agente.
 // apiURL es la URL HTTP de la API (con o sin /api/v1).
@@ -230,8 +284,9 @@ func (c *Client) acceptLoop(ln net.Listener) {
 			ready:    make(chan struct{}),
 			failed:   make(chan struct{}),
 		}
+		s.initFlow()
 		c.register(s)
-		c.send(msg{Type: typeTunnelOpen, TunnelID: c.tunnelID, StreamID: s.streamID})
+		c.send(msg{Type: typeTunnelOpen, TunnelID: c.tunnelID, StreamID: s.streamID, FC: true})
 		go c.sourceStream(s)
 	}
 }
@@ -254,8 +309,9 @@ func (c *Client) sourceStream(s *stream) {
 
 // openDest (rol dest) hace el dial al servicio local y, si tiene éxito, arranca el relay.
 // Prioriza dialAddr (--to del usuario); si está vacío usa el host:port del tunnel_open
-// (los valores remote_host/remote_port guardados en el túnel).
-func (c *Client) openDest(streamID, host string, port int) {
+// (los valores remote_host/remote_port guardados en el túnel). peerFC indica si el
+// source soporta control de flujo (el gating se activa sólo si ambos lo soportan).
+func (c *Client) openDest(streamID, host string, port int, peerFC bool) {
 	addr := c.dialAddr
 	if addr == "" {
 		addr = fmt.Sprintf("%s:%d", host, port)
@@ -266,7 +322,9 @@ func (c *Client) openDest(streamID, host string, port int) {
 		done:     make(chan struct{}),
 		ready:    make(chan struct{}),
 		failed:   make(chan struct{}),
+		fc:       peerFC,
 	}
+	s.initFlow()
 	c.register(s)
 
 	go func() {
@@ -278,7 +336,9 @@ func (c *Client) openDest(streamID, host string, port int) {
 			return
 		}
 		s.conn = conn
-		c.send(msg{Type: typeTunnelOpenAck, TunnelID: c.tunnelID, StreamID: streamID, OK: true})
+		// FC: peerFC hace eco de la capacidad negociada (fallback limpio si el flag no
+		// llegó por un backend antiguo).
+		c.send(msg{Type: typeTunnelOpenAck, TunnelID: c.tunnelID, StreamID: streamID, OK: true, FC: peerFC})
 		c.relay(s)
 	}()
 }
@@ -305,10 +365,10 @@ func (c *Client) readLoop(readErr chan<- error) {
 		case typeTunnelOpen:
 			// Sólo el rol dest recibe tunnel_open: hace el dial al servicio local.
 			if c.role == roleDest {
-				c.openDest(m.StreamID, m.Host, m.Port)
+				c.openDest(m.StreamID, m.Host, m.Port, m.FC)
 			}
 		case typeTunnelOpenAck:
-			c.ack(m.StreamID, m.OK)
+			c.ack(m.StreamID, m.OK, m.FC)
 		case typeTunnelData:
 			b, e := base64.StdEncoding.DecodeString(m.Data)
 			if e == nil {
@@ -316,6 +376,8 @@ func (c *Client) readLoop(readErr chan<- error) {
 			}
 		case typeTunnelClose:
 			c.closeStream(m.StreamID)
+		case typeTunnelWindow:
+			c.addCredit(m.StreamID, m.Bytes)
 		case typeTunnelStop:
 			readErr <- nil // el backend cerró el túnel
 			return
@@ -323,7 +385,7 @@ func (c *Client) readLoop(readErr chan<- error) {
 	}
 }
 
-func (c *Client) ack(streamID string, ok bool) {
+func (c *Client) ack(streamID string, ok, peerFC bool) {
 	c.mu.Lock()
 	s := c.streams[streamID]
 	c.mu.Unlock()
@@ -331,6 +393,7 @@ func (c *Client) ack(streamID string, ok bool) {
 		return
 	}
 	if ok {
+		s.fc = peerFC // se fija antes de cerrar ready (el relay arranca después)
 		safeClose(s.ready)
 	} else {
 		safeClose(s.failed)
@@ -353,6 +416,16 @@ func (c *Client) data(streamID string, b []byte) {
 		s.abort()
 		c.unregister(streamID)
 	}
+}
+
+func (c *Client) addCredit(streamID string, bytes int) {
+	c.mu.Lock()
+	s := c.streams[streamID]
+	c.mu.Unlock()
+	if s == nil || bytes <= 0 {
+		return
+	}
+	s.addCredit(bytes)
 }
 
 func (c *Client) closeStream(streamID string) {
@@ -387,19 +460,37 @@ func (c *Client) relay(s *stream) {
 					c.unregister(s.streamID)
 					return
 				}
+				// Conceder crédito al emisor opuesto: ya drenamos len(b).
+				if s.fc {
+					c.send(msg{Type: typeTunnelWindow, TunnelID: c.tunnelID, StreamID: s.streamID, Bytes: len(b)})
+				}
 			}
 		}
 	}()
 
-	// Lector (local→peer): conn → tunnel_data; al ver EOF señala el fin de la dirección.
+	// Lector (local→peer): conn → tunnel_data. Con control de flujo (s.fc) espera crédito
+	// antes de leer → backpressure al origen si el receptor opuesto va lento. Sin fc (peer
+	// antiguo) lee libremente. Al ver EOF señala el fin de la dirección.
 	buf := make([]byte, relayBuf)
 	for {
-		n, err := s.conn.Read(buf)
+		budget := len(buf)
+		if s.fc {
+			budget = s.takeCredit(len(buf))
+			if budget == 0 {
+				return // stream cerrado mientras esperaba crédito
+			}
+		}
+		n, err := s.conn.Read(buf[:budget])
 		if n > 0 {
 			chunk := make([]byte, n)
 			copy(chunk, buf[:n])
 			c.send(msg{Type: typeTunnelData, TunnelID: c.tunnelID, StreamID: s.streamID,
 				Data: base64.StdEncoding.EncodeToString(chunk)})
+			if s.fc {
+				if rem := budget - n; rem > 0 {
+					s.addCredit(rem)
+				}
+			}
 		}
 		if err != nil {
 			c.send(msg{Type: typeTunnelClose, TunnelID: c.tunnelID, StreamID: s.streamID})

@@ -3,6 +3,13 @@
 El formato sigue [Keep a Changelog](https://keepachangelog.com/) y
 [SemVer](https://semver.org/lang/es/).
 
+## [1.1.0] — 2026-06-20
+
+### Mejorado
+- **Control de flujo por créditos en los túneles**: backpressure real cuando el
+  consumidor va más lento que el productor (antes podía resetearse el stream). Se
+  negocia con el extremo opuesto; fallback al modo previo con versiones antiguas.
+
 ## [1.0.0] — 2026-06-20
 
 Primer release público del CLI de AuraNode.
