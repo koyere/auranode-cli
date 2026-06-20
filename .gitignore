@@ -1,0 +1,16 @@
+# Binarios y artefactos de build
+/dist/
+/bin/
+/auranode
+/auranode.exe
+*.exe
+
+# Config local
+.auranode/
+.env
+.env.*
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/

@@ -1,0 +1,52 @@
+version: 2
+project_name: auranode-cli
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: auranode
+    main: .
+    binary: auranode
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{ .Version }}
+
+archives:
+  - id: default
+    formats:
+      - tar.gz
+    # Windows en zip.
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    # auranode_1.0.0_linux_amd64.tar.gz, auranode_1.0.0_darwin_arm64.tar.gz, ...
+    name_template: "auranode_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+release:
+  draft: false
+  prerelease: auto
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "^sync:"
