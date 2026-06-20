@@ -3,6 +3,12 @@
 El formato sigue [Keep a Changelog](https://keepachangelog.com/) y
 [SemVer](https://semver.org/lang/es/).
 
+## [1.1.1] — 2026-06-20
+
+### Corregido
+- **Deadlock de half-close en túneles**: al cerrarse una dirección, los créditos de la
+  dirección aún activa se perdían y la conexión se colgaba. Corregido (half-close real).
+
 ## [1.1.0] — 2026-06-20
 
 ### Mejorado

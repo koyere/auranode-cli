@@ -20,6 +20,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -100,9 +101,10 @@ type stream struct {
 	ready    chan struct{}
 	failed   chan struct{}
 
-	closeOnce sync.Once
-	inboxOnce sync.Once
-	stateMu   sync.Mutex
+	closeOnce   sync.Once
+	inboxOnce   sync.Once
+	inboxClosed atomic.Bool
+	stateMu     sync.Mutex
 	readDone  bool
 	writeDone bool
 
@@ -124,7 +126,9 @@ func (s *stream) abort() {
 	})
 }
 
-func (s *stream) closeInbox() { s.inboxOnce.Do(func() { close(s.inbox) }) }
+func (s *stream) closeInbox() {
+	s.inboxOnce.Do(func() { s.inboxClosed.Store(true); close(s.inbox) })
+}
 
 // initFlow inicializa el control de flujo con la ventana completa.
 func (s *stream) initFlow() {
@@ -404,8 +408,8 @@ func (c *Client) data(streamID string, b []byte) {
 	c.mu.Lock()
 	s := c.streams[streamID]
 	c.mu.Unlock()
-	if s == nil {
-		return
+	if s == nil || s.inboxClosed.Load() {
+		return // stream cerrado en esta dirección: no enviar (evita panic)
 	}
 	select {
 	case <-s.done:
@@ -428,10 +432,12 @@ func (c *Client) addCredit(streamID string, bytes int) {
 	s.addCredit(bytes)
 }
 
+// closeStream cierra la dirección peer→local (half-close). NO elimina el stream del
+// mapa: la dirección local→peer puede seguir activa y necesita recibir créditos. El
+// stream se elimina vía markDone cuando ambas direcciones terminan.
 func (c *Client) closeStream(streamID string) {
 	c.mu.Lock()
 	s := c.streams[streamID]
-	delete(c.streams, streamID)
 	c.mu.Unlock()
 	if s != nil {
 		s.closeInbox()
