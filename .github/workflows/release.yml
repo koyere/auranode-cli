@@ -9,8 +9,8 @@ permissions:
   contents: write
 
 env:
-  # El proyecto fija go 1.23 y x/term v0.27.0; evitar que el toolchain se
-  # auto-actualice a una versión que rompa la compatibilidad.
+  # The project pins go 1.23 and x/term v0.27.0; prevent the toolchain from
+  # auto-updating to a version that breaks compatibility.
   GOTOOLCHAIN: local
 
 jobs:

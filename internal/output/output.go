@@ -1,4 +1,4 @@
-// Package output formatea la salida del CLI en tablas legibles o JSON para scripts.
+// Package output formats the CLI output as readable tables or JSON for scripts.
 package output
 
 import (
@@ -9,7 +9,7 @@ import (
 	"text/tabwriter"
 )
 
-// Format es el formato de salida elegido por el usuario.
+// Format is the output format chosen by the user.
 type Format string
 
 const (
@@ -17,7 +17,7 @@ const (
 	FormatJSON  Format = "json"
 )
 
-// Parse valida un string de formato; devuelve table por defecto.
+// Parse validates a format string; returns table by default.
 func Parse(s string) (Format, error) {
 	switch Format(s) {
 	case FormatTable, FormatJSON:
@@ -25,19 +25,19 @@ func Parse(s string) (Format, error) {
 	case "":
 		return FormatTable, nil
 	default:
-		return FormatTable, fmt.Errorf("formato inválido %q (usa: table, json)", s)
+		return FormatTable, fmt.Errorf("invalid format %q (use: table, json)", s)
 	}
 }
 
-// JSON imprime cualquier valor como JSON indentado.
+// JSON prints any value as indented JSON.
 func JSON(v any) error {
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 	return enc.Encode(v)
 }
 
-// Table imprime filas tabuladas con cabecera. Cada fila debe tener tantas
-// columnas como headers.
+// Table prints tab-separated rows with a header. Each row must have as many
+// columns as headers.
 func Table(headers []string, rows [][]string) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 2, 2, ' ', 0)
 	fmt.Fprintln(w, strings.Join(headers, "\t"))
@@ -47,14 +47,14 @@ func Table(headers []string, rows [][]string) {
 	w.Flush()
 }
 
-// Render elige entre tabla y JSON según el formato. En JSON imprime raw;
-// en tabla usa los headers/rows provistos.
+// Render chooses between table and JSON depending on the format. In JSON it prints raw;
+// in table mode it uses the provided headers/rows.
 func Render(f Format, raw any, headers []string, rows [][]string) error {
 	if f == FormatJSON {
 		return JSON(raw)
 	}
 	if len(rows) == 0 {
-		fmt.Println("(sin resultados)")
+		fmt.Println("(no results)")
 		return nil
 	}
 	Table(headers, rows)

@@ -19,24 +19,24 @@ func init() {
 	serversCmd := &cobra.Command{
 		Use:     "servers",
 		Aliases: []string{"server", "srv"},
-		Short:   "Gestionar servidores (agentes)",
+		Short:   "Manage servers (agents)",
 	}
 
 	listCmd := &cobra.Command{
 		Use:   "list",
-		Short: "Listar servidores",
+		Short: "List servers",
 		RunE:  runServersList,
 	}
-	listCmd.Flags().StringVar(&srvFilterTag, "tag", "", "filtrar por tag")
-	listCmd.Flags().StringVar(&srvFilterStatus, "status", "", "filtrar por estado (online/offline/...)")
+	listCmd.Flags().StringVar(&srvFilterTag, "tag", "", "filter by tag")
+	listCmd.Flags().StringVar(&srvFilterStatus, "status", "", "filter by status (online/offline/...)")
 
 	showCmd := &cobra.Command{
 		Use:   "show <name|id>",
-		Short: "Detalle de un servidor",
+		Short: "Show server details",
 		Args:  cobra.ExactArgs(1),
 		RunE:  runServersShow,
 	}
-	showCmd.Flags().BoolVar(&srvShowMetrics, "metrics", false, "incluir métricas actuales")
+	showCmd.Flags().BoolVar(&srvShowMetrics, "metrics", false, "include current metrics")
 
 	serversCmd.AddCommand(listCmd, showCmd)
 	rootCmd.AddCommand(serversCmd)
@@ -61,7 +61,7 @@ func str(a agent, key string) string {
 	return ""
 }
 
-// resolveAgent encuentra un agente por id exacto o por nombre.
+// resolveAgent finds an agent by exact id or by name.
 func resolveAgent(c *client.Client, ref string) (agent, error) {
 	agents, err := fetchAgents(c)
 	if err != nil {
@@ -72,7 +72,7 @@ func resolveAgent(c *client.Client, ref string) (agent, error) {
 			return a, nil
 		}
 	}
-	return nil, fmt.Errorf("servidor no encontrado: %s", ref)
+	return nil, fmt.Errorf("server not found: %s", ref)
 }
 
 func runServersList(cmd *cobra.Command, _ []string) error {
@@ -94,7 +94,7 @@ func runServersList(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	// Filtros del lado del cliente (la API no los expone todos).
+	// Client-side filters (the API does not expose them all).
 	filtered := agents[:0]
 	for _, a := range agents {
 		if srvFilterStatus != "" && !strings.EqualFold(str(a, "status"), srvFilterStatus) {

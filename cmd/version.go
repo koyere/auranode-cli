@@ -9,7 +9,7 @@ import (
 func init() {
 	rootCmd.AddCommand(&cobra.Command{
 		Use:   "version",
-		Short: "Mostrar la versión del CLI",
+		Short: "Show the CLI version",
 		Run: func(cmd *cobra.Command, _ []string) {
 			fmt.Printf("auranode %s\n", version)
 		},

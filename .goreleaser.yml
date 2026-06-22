@@ -26,7 +26,7 @@ archives:
   - id: default
     formats:
       - tar.gz
-    # Windows en zip.
+    # Windows uses zip.
     format_overrides:
       - goos: windows
         formats:

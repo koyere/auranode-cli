@@ -1,31 +1,37 @@
 # Changelog
 
-El formato sigue [Keep a Changelog](https://keepachangelog.com/) y
-[SemVer](https://semver.org/lang/es/).
+The format follows [Keep a Changelog](https://keepachangelog.com/) and
+[SemVer](https://semver.org/).
+
+## [1.1.2] — 2026-06-22
+
+### Changed
+- The CLI is now fully in English: user-facing output, command help and error
+  messages (no functional changes).
 
 ## [1.1.1] — 2026-06-20
 
-### Corregido
-- **Deadlock de half-close en túneles**: al cerrarse una dirección, los créditos de la
-  dirección aún activa se perdían y la conexión se colgaba. Corregido (half-close real).
+### Fixed
+- **Tunnel half-close deadlock:** when one direction closed, the credits of the
+  still-active direction were lost and the connection hung. Fixed (true half-close).
 
 ## [1.1.0] — 2026-06-20
 
-### Mejorado
-- **Control de flujo por créditos en los túneles**: backpressure real cuando el
-  consumidor va más lento que el productor (antes podía resetearse el stream). Se
-  negocia con el extremo opuesto; fallback al modo previo con versiones antiguas.
+### Improved
+- **Credit-based flow control on tunnels:** real backpressure when the consumer is
+  slower than the producer (previously the stream could reset). Negotiated with the
+  remote end; falls back to the previous mode with older versions.
 
 ## [1.0.0] — 2026-06-20
 
-Primer release público del CLI de AuraNode.
+First public release of the AuraNode CLI.
 
-### Añadido
-- `auth` (login email/contraseña + `--totp`, logout, status, token; honra
-  `AURANODE_TOKEN`/`AURANODE_API_URL` para CI/CD).
-- `servers` (list con `--tag/--status`, show con `--metrics`).
-- `status` (vista global + CPU/RAM en vivo).
-- `exec` (ejecución remota con polling hasta estado terminal).
-- `tunnel` (port-forwarding Tipo 1 local y Tipo 2 reverse dest=CLI: list/create/open/expose/rm).
-- `config`, `version`. Salida `table`/`json` (`-o`), perfiles multi-entorno.
-- Binarios para linux/macOS/windows (amd64/arm64) con verificación SHA256.
+### Added
+- `auth` (login with email/password + `--totp`, logout, status, token; honors
+  `AURANODE_TOKEN`/`AURANODE_API_URL` for CI/CD).
+- `servers` (list with `--tag/--status`, show with `--metrics`).
+- `status` (global view + live CPU/RAM).
+- `exec` (remote execution with polling until terminal state).
+- `tunnel` (Type 1 local and Type 2 reverse dest=CLI port-forwarding: list/create/open/expose/rm).
+- `config`, `version`. `table`/`json` output (`-o`), multi-environment profiles.
+- Binaries for linux/macOS/windows (amd64/arm64) with SHA256 verification.

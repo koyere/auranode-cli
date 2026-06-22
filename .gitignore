@@ -1,11 +1,11 @@
-# Binarios y artefactos de build
+# Binaries and build artifacts
 /dist/
 /bin/
 /auranode
 /auranode.exe
 *.exe
 
-# Config local
+# Local config
 .auranode/
 .env
 .env.*

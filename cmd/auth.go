@@ -20,22 +20,22 @@ var (
 func init() {
 	authCmd := &cobra.Command{
 		Use:   "auth",
-		Short: "Autenticación y sesión",
+		Short: "Authentication and session",
 	}
 
 	loginCmd := &cobra.Command{
 		Use:   "login",
-		Short: "Autenticarse con email y contraseña",
+		Short: "Sign in with email and password",
 		RunE:  runLogin,
 	}
-	loginCmd.Flags().StringVar(&loginEmail, "email", "", "email de la cuenta")
-	loginCmd.Flags().StringVar(&loginTOTP, "totp", "", "código 2FA (si está activo)")
+	loginCmd.Flags().StringVar(&loginEmail, "email", "", "account email")
+	loginCmd.Flags().StringVar(&loginTOTP, "totp", "", "2FA code (if enabled)")
 
 	authCmd.AddCommand(
 		loginCmd,
-		&cobra.Command{Use: "logout", Short: "Cerrar sesión local", RunE: runLogout},
-		&cobra.Command{Use: "status", Short: "Mostrar usuario y tenant actuales", RunE: runAuthStatus},
-		&cobra.Command{Use: "token", Short: "Imprimir el token actual (para scripts)", RunE: runAuthToken},
+		&cobra.Command{Use: "logout", Short: "Sign out locally", RunE: runLogout},
+		&cobra.Command{Use: "status", Short: "Show the current user and tenant", RunE: runAuthStatus},
+		&cobra.Command{Use: "token", Short: "Print the current token (for scripts)", RunE: runAuthToken},
 	)
 	rootCmd.AddCommand(authCmd)
 }
@@ -62,18 +62,18 @@ func runLogin(cmd *cobra.Command, _ []string) error {
 		email = strings.TrimSpace(line)
 	}
 	if email == "" {
-		return fmt.Errorf("el email es requerido")
+		return fmt.Errorf("email is required")
 	}
 
-	fmt.Print("Contraseña: ")
+	fmt.Print("Password: ")
 	pwBytes, err := term.ReadPassword(int(os.Stdin.Fd()))
 	fmt.Println()
 	if err != nil {
-		return fmt.Errorf("no se pudo leer la contraseña: %w", err)
+		return fmt.Errorf("could not read the password: %w", err)
 	}
 	password := string(pwBytes)
 
-	// La URL puede venir de --api-url; si no, del perfil/env.
+	// The URL may come from --api-url; otherwise from the profile/env.
 	p := cfg.Profile(flagProfile)
 	apiURL := p.APIURL
 	if env := os.Getenv("AURANODE_API_URL"); env != "" {
@@ -94,7 +94,7 @@ func runLogin(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 	if resp.Requires2FA {
-		return fmt.Errorf("esta cuenta tiene 2FA activo: repite con --totp <código>")
+		return fmt.Errorf("this account has 2FA enabled: retry with --totp <code>")
 	}
 
 	p.APIURL = apiURL
@@ -108,7 +108,7 @@ func runLogin(cmd *cobra.Command, _ []string) error {
 	}
 
 	if !flagQuiet {
-		fmt.Printf("Autenticado como %s\n", email)
+		fmt.Printf("Authenticated as %s\n", email)
 	}
 	return nil
 }
@@ -122,7 +122,7 @@ func runLogout(cmd *cobra.Command, _ []string) error {
 	if name == "" {
 		name = cfg.DefaultProfile
 	}
-	// Best-effort: revocar la sesión en el backend antes de borrar local.
+	// Best-effort: revoke the session on the backend before clearing local state.
 	if c, err := newClient(cfg); err == nil {
 		_ = c.Post("/auth/logout", nil, nil)
 	}
@@ -134,7 +134,7 @@ func runLogout(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 	if !flagQuiet {
-		fmt.Println("Sesión cerrada.")
+		fmt.Println("Signed out.")
 	}
 	return nil
 }
@@ -152,10 +152,10 @@ func runAuthStatus(cmd *cobra.Command, _ []string) error {
 	if p.Token == "" && os.Getenv("AURANODE_TOKEN") == "" {
 		return config.ErrNotAuthenticated
 	}
-	fmt.Printf("Perfil:  %s\n", name)
+	fmt.Printf("Profile: %s\n", name)
 	fmt.Printf("Backend: %s\n", p.APIURL)
 	if p.UserEmail != "" {
-		fmt.Printf("Usuario: %s\n", p.UserEmail)
+		fmt.Printf("User:    %s\n", p.UserEmail)
 	}
 	if p.TenantID != "" {
 		fmt.Printf("Tenant:  %s\n", p.TenantID)

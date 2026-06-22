@@ -12,12 +12,12 @@ var execTimeout int
 
 func init() {
 	execCmd := &cobra.Command{
-		Use:   "exec <name|id> <comando>",
-		Short: "Ejecutar un comando en un servidor",
+		Use:   "exec <name|id> <command>",
+		Short: "Run a command on a server",
 		Args:  cobra.MinimumNArgs(2),
 		RunE:  runExec,
 	}
-	execCmd.Flags().IntVar(&execTimeout, "timeout", 30, "timeout en segundos")
+	execCmd.Flags().IntVar(&execTimeout, "timeout", 30, "timeout in seconds")
 	rootCmd.AddCommand(execCmd)
 }
 
@@ -45,10 +45,10 @@ func runExec(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if started.CommandID == "" {
-		return fmt.Errorf("el backend no devolvió un command_id")
+		return fmt.Errorf("the backend did not return a command_id")
 	}
 
-	// Polling hasta estado terminal (timeout del comando + margen).
+	// Poll until terminal state (command timeout + margin).
 	deadline := time.Now().Add(time.Duration(execTimeout+10) * time.Second)
 	for {
 		var res struct {
@@ -71,7 +71,7 @@ func runExec(cmd *cobra.Command, args []string) error {
 				fmt.Fprint(os.Stderr, res.Stderr)
 			}
 			if res.Status != "completed" {
-				return fmt.Errorf("comando %s", res.Status)
+				return fmt.Errorf("command %s", res.Status)
 			}
 			if res.ExitCode != nil && *res.ExitCode != 0 {
 				return fmt.Errorf("exit code %d", *res.ExitCode)
@@ -79,7 +79,7 @@ func runExec(cmd *cobra.Command, args []string) error {
 			return nil
 		}
 		if time.Now().After(deadline) {
-			return fmt.Errorf("timeout esperando el resultado del comando")
+			return fmt.Errorf("timed out waiting for the command result")
 		}
 		time.Sleep(500 * time.Millisecond)
 	}

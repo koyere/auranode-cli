@@ -12,7 +12,7 @@ import (
 func init() {
 	statusCmd := &cobra.Command{
 		Use:   "status",
-		Short: "Estado de toda la infraestructura",
+		Short: "Status of your whole infrastructure",
 		RunE:  runStatus,
 	}
 	rootCmd.AddCommand(statusCmd)
@@ -56,7 +56,7 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 	}
 
 	if len(agents) == 0 {
-		fmt.Println("No hay servidores registrados.")
+		fmt.Println("No servers registered.")
 		return nil
 	}
 
@@ -75,7 +75,7 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-// currentUsage obtiene CPU% y RAM% actuales (best-effort; vacío si falla).
+// currentUsage gets the current CPU%% and RAM%% (best-effort; empty on failure).
 func currentUsage(c *client.Client, agentID string) (cpu, ram string) {
 	var m map[string]any
 	if err := c.Get("/agents/"+agentID+"/metrics/current", &m); err != nil {

@@ -1,4 +1,4 @@
-// Package cmd define los comandos del CLI de AuraNode (cobra).
+// Package cmd defines the AuraNode CLI commands (cobra).
 package cmd
 
 import (
@@ -11,7 +11,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Flags globales (persistentes en todos los subcomandos).
+// Global flags (persistent across all subcommands).
 var (
 	flagOutput  string
 	flagProfile string
@@ -21,21 +21,21 @@ var (
 	flagNoColor bool
 )
 
-// version la inyecta main vía SetVersion.
+// version is injected by main via SetVersion.
 var version = "dev"
 
-// SetVersion fija la versión del binario (desde -ldflags en main).
+// SetVersion sets the binary version (from -ldflags in main).
 func SetVersion(v string) { version = v }
 
 var rootCmd = &cobra.Command{
 	Use:           "auranode",
-	Short:         "AuraNode — gestiona tus servidores desde la terminal",
-	Long:          "auranode es el CLI del panel AuraNode: servidores, métricas, ejecución remota y más.",
+	Short:         "AuraNode — manage your servers from the terminal",
+	Long:          "auranode is the CLI for the AuraNode panel: servers, metrics, remote execution and more.",
 	SilenceUsage:  true,
 	SilenceErrors: true,
 }
 
-// Execute corre el comando raíz; devuelve el código de salida.
+// Execute runs the root command; returns the exit code.
 func Execute() int {
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, "Error:", err)
@@ -46,20 +46,20 @@ func Execute() int {
 
 func init() {
 	pf := rootCmd.PersistentFlags()
-	pf.StringVarP(&flagOutput, "output", "o", "", "formato de salida: table|json")
-	pf.StringVar(&flagProfile, "profile", "", "perfil a usar (multi-cuenta)")
-	pf.StringVar(&flagAPIURL, "api-url", "", "sobreescribe la URL del backend")
-	pf.BoolVarP(&flagQuiet, "quiet", "q", false, "solo salida esencial")
-	pf.BoolVarP(&flagVerbose, "verbose", "v", false, "salida detallada")
-	pf.BoolVar(&flagNoColor, "no-color", false, "sin colores (para pipes)")
+	pf.StringVarP(&flagOutput, "output", "o", "", "output format: table|json")
+	pf.StringVar(&flagProfile, "profile", "", "profile to use (multi-account)")
+	pf.StringVar(&flagAPIURL, "api-url", "", "override the backend URL")
+	pf.BoolVarP(&flagQuiet, "quiet", "q", false, "essential output only")
+	pf.BoolVarP(&flagVerbose, "verbose", "v", false, "verbose output")
+	pf.BoolVar(&flagNoColor, "no-color", false, "no colors (for pipes)")
 }
 
-// loadConfig carga la config del disco (o una vacía si no existe).
+// loadConfig loads the config from disk (or an empty one if it does not exist).
 func loadConfig() (*config.Config, error) {
 	return config.Load()
 }
 
-// resolveFormat decide el formato: flag > default_format de la config.
+// resolveFormat decides the format: flag > config default_format.
 func resolveFormat(cfg *config.Config) (output.Format, error) {
 	if flagOutput != "" {
 		return output.Parse(flagOutput)
@@ -67,9 +67,9 @@ func resolveFormat(cfg *config.Config) (output.Format, error) {
 	return output.Parse(cfg.DefaultFormat)
 }
 
-// newClient construye un cliente autenticado para el perfil activo.
-// Precedencia del token: env AURANODE_TOKEN > token del perfil.
-// Precedencia de la URL: --api-url > env AURANODE_API_URL > perfil.
+// newClient builds an authenticated client for the active profile.
+// Token precedence: env AURANODE_TOKEN > profile token.
+// URL precedence: --api-url > env AURANODE_API_URL > profile.
 func newClient(cfg *config.Config) (*client.Client, error) {
 	p := cfg.Profile(flagProfile)
 
@@ -91,8 +91,8 @@ func newClient(cfg *config.Config) (*client.Client, error) {
 	return client.New(apiURL, token), nil
 }
 
-// resolveConn devuelve (apiURL, token) con la misma precedencia que newClient.
-// Lo usan los comandos que necesitan la URL/token crudos (p.ej. WebSocket de túneles).
+// resolveConn returns (apiURL, token) with the same precedence as newClient.
+// Used by commands that need the raw URL/token (e.g. tunnel WebSocket).
 func resolveConn(cfg *config.Config) (string, string, error) {
 	p := cfg.Profile(flagProfile)
 

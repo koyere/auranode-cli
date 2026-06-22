@@ -1,5 +1,5 @@
-// Package config gestiona la configuración persistente del CLI en
-// ~/.auranode/config.yaml, con soporte multi-perfil (varias cuentas/tenants).
+// Package config manages the CLI's persistent configuration in
+// ~/.auranode/config.yaml, with multi-profile support (multiple accounts/tenants).
 package config
 
 import (
@@ -12,7 +12,7 @@ import (
 
 const defaultAPIURL = "https://api.auranode.app"
 
-// Profile son las credenciales y ajustes de una cuenta concreta.
+// Profile holds the credentials and settings of a specific account.
 type Profile struct {
 	APIURL    string `yaml:"api_url"`
 	Token     string `yaml:"token,omitempty"`
@@ -21,19 +21,19 @@ type Profile struct {
 	TenantID  string `yaml:"tenant_id,omitempty"`
 }
 
-// Config es el archivo completo: varios perfiles + ajustes globales.
+// Config is the full file: multiple profiles + global settings.
 type Config struct {
 	DefaultProfile string             `yaml:"default_profile"`
 	DefaultFormat  string             `yaml:"default_format"`
 	Profiles       map[string]Profile `yaml:"profiles"`
 
-	path string // ruta del archivo cargado (no se serializa)
+	path string // path of the loaded file (not serialized)
 }
 
-// ErrNotAuthenticated indica que el perfil activo no tiene token.
-var ErrNotAuthenticated = errors.New("no autenticado: ejecuta 'auranode auth login'")
+// ErrNotAuthenticated indicates the active profile has no token.
+var ErrNotAuthenticated = errors.New("not authenticated: run 'auranode auth login'")
 
-// Dir devuelve el directorio de configuración (~/.auranode).
+// Dir returns the configuration directory (~/.auranode).
 func Dir() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -42,8 +42,8 @@ func Dir() (string, error) {
 	return filepath.Join(home, ".auranode"), nil
 }
 
-// Load lee la configuración del disco; si no existe, devuelve una vacía con
-// valores por defecto (no es error: el primer uso no tiene config aún).
+// Load reads the configuration from disk; if it does not exist, returns an empty one with
+// default values (not an error: first use has no config yet).
 func Load() (*Config, error) {
 	dir, err := Dir()
 	if err != nil {
@@ -81,7 +81,7 @@ func Load() (*Config, error) {
 	return cfg, nil
 }
 
-// Save persiste la configuración con permisos 0600 (contiene tokens).
+// Save persists the configuration with 0600 permissions (contains tokens).
 func (c *Config) Save() error {
 	dir := filepath.Dir(c.path)
 	if err := os.MkdirAll(dir, 0700); err != nil {
@@ -94,8 +94,8 @@ func (c *Config) Save() error {
 	return os.WriteFile(c.path, data, 0600)
 }
 
-// Profile devuelve el perfil indicado (o el por defecto si name == "").
-// Aplica el APIURL por defecto si el perfil no define uno.
+// Profile returns the named profile (or the default if name == "").
+// Applies the default APIURL if the profile does not define one.
 func (c *Config) Profile(name string) Profile {
 	if name == "" {
 		name = c.DefaultProfile
@@ -107,7 +107,7 @@ func (c *Config) Profile(name string) Profile {
 	return p
 }
 
-// SetProfile guarda/actualiza un perfil.
+// SetProfile saves/updates a profile.
 func (c *Config) SetProfile(name string, p Profile) {
 	if name == "" {
 		name = c.DefaultProfile

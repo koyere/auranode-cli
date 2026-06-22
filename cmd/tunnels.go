@@ -31,55 +31,55 @@ func init() {
 	tunnelsCmd := &cobra.Command{
 		Use:     "tunnel",
 		Aliases: []string{"tunnels", "tun"},
-		Short:   "Port forwarding: túneles a servicios de tus VPS",
+		Short:   "Port forwarding: tunnels to services on your VPS",
 	}
 
 	listCmd := &cobra.Command{
 		Use:   "list",
-		Short: "Listar túneles",
+		Short: "List tunnels",
 		RunE:  runTunnelsList,
 	}
 
 	createCmd := &cobra.Command{
 		Use:   "create",
-		Short: "Crear un túnel local (el listener vive en tu máquina)",
-		Long: "Crear un túnel local (Tipo 1) o, con --reverse, un túnel reverse (Tipo 2):\n" +
-			"  Local   (default): escuchas en tu máquina y reenvías a un servicio del VPS.\n" +
-			"  Reverse (--reverse): el VPS abre un puerto público y reenvía a un servicio\n" +
-			"                       local tuyo (caso webhooks/ngrok).",
+		Short: "Create a local tunnel (the listener lives on your machine)",
+		Long: "Create a local tunnel (Type 1) or, with --reverse, a reverse tunnel (Type 2):\n" +
+			"  Local   (default): you listen on your machine and forward to a VPS service.\n" +
+			"  Reverse (--reverse): the VPS opens a public port and forwards to a local\n" +
+			"                       service of yours (webhooks/ngrok case).",
 		RunE: runTunnelCreate,
 	}
-	createCmd.Flags().BoolVar(&tunReverse, "reverse", false, "crear un túnel reverse (Tipo 2): expone un servicio local tuyo en el VPS")
-	createCmd.Flags().StringVar(&tunAgent, "agent", "", "VPS: destino que aloja el servicio (local) u origen que expone el puerto (reverse) (name|id) [requerido]")
-	createCmd.Flags().IntVar(&tunRemotePort, "remote-port", 0, "[local] puerto del servicio en el VPS")
-	createCmd.Flags().IntVar(&tunLocalPort, "local-port", 0, "[local] puerto local (por defecto = remote-port)")
-	createCmd.Flags().StringVar(&tunRemoteHost, "remote-host", "127.0.0.1", "[local] host del servicio visto desde el VPS")
-	createCmd.Flags().IntVar(&tunVPSPort, "vps-port", 0, "[reverse] puerto público a abrir en el VPS")
-	createCmd.Flags().StringVar(&tunTo, "to", "", "[reverse] servicio local a exponer (host:port o port)")
-	createCmd.Flags().StringVar(&tunBind, "bind", "", "[reverse] interfaz del listener en el VPS (default 0.0.0.0)")
-	createCmd.Flags().StringVar(&tunName, "name", "", "nombre del túnel (por defecto derivado)")
+	createCmd.Flags().BoolVar(&tunReverse, "reverse", false, "create a reverse tunnel (Type 2): expose a local service of yours on the VPS")
+	createCmd.Flags().StringVar(&tunAgent, "agent", "", "VPS: destination hosting the service (local) or source exposing the port (reverse) (name|id) [required]")
+	createCmd.Flags().IntVar(&tunRemotePort, "remote-port", 0, "[local] port of the service on the VPS")
+	createCmd.Flags().IntVar(&tunLocalPort, "local-port", 0, "[local] local port (default = remote-port)")
+	createCmd.Flags().StringVar(&tunRemoteHost, "remote-host", "127.0.0.1", "[local] host of the service as seen from the VPS")
+	createCmd.Flags().IntVar(&tunVPSPort, "vps-port", 0, "[reverse] public port to open on the VPS")
+	createCmd.Flags().StringVar(&tunTo, "to", "", "[reverse] local service to expose (host:port or port)")
+	createCmd.Flags().StringVar(&tunBind, "bind", "", "[reverse] listener interface on the VPS (default 0.0.0.0)")
+	createCmd.Flags().StringVar(&tunName, "name", "", "tunnel name (derived by default)")
 	_ = createCmd.MarkFlagRequired("agent")
 
 	openCmd := &cobra.Command{
 		Use:   "open <name|id>",
-		Short: "Abrir un túnel local: escucha en tu máquina y reenvía al VPS (bloquea hasta Ctrl+C)",
+		Short: "Open a local tunnel: listen on your machine and forward to the VPS (blocks until Ctrl+C)",
 		Args:  cobra.ExactArgs(1),
 		RunE:  runTunnelOpen,
 	}
-	openCmd.Flags().IntVar(&tunLocalPort, "local-port", 0, "sobreescribe el puerto local")
+	openCmd.Flags().IntVar(&tunLocalPort, "local-port", 0, "override the local port")
 
 	exposeCmd := &cobra.Command{
 		Use:   "expose <name|id>",
-		Short: "Abrir un túnel reverse: el VPS expone un servicio local tuyo (bloquea hasta Ctrl+C)",
+		Short: "Open a reverse tunnel: the VPS exposes a local service of yours (blocks until Ctrl+C)",
 		Args:  cobra.ExactArgs(1),
 		RunE:  runTunnelExpose,
 	}
-	exposeCmd.Flags().StringVar(&tunTo, "to", "", "sobreescribe el servicio local a exponer (host:port o port)")
+	exposeCmd.Flags().StringVar(&tunTo, "to", "", "override the local service to expose (host:port or port)")
 
 	rmCmd := &cobra.Command{
 		Use:     "rm <name|id>",
 		Aliases: []string{"delete", "remove"},
-		Short:   "Eliminar un túnel",
+		Short:   "Delete a tunnel",
 		Args:    cobra.ExactArgs(1),
 		RunE:    runTunnelRm,
 	}
@@ -107,7 +107,7 @@ func tstr(t tunnelRec, key string) string {
 	return ""
 }
 
-// resolveTunnel encuentra un túnel por id exacto o por nombre.
+// resolveTunnel finds a tunnel by exact id or by name.
 func resolveTunnel(c *client.Client, ref string) (tunnelRec, error) {
 	tunnels, err := fetchTunnels(c)
 	if err != nil {
@@ -128,9 +128,9 @@ func resolveTunnel(c *client.Client, ref string) (tunnelRec, error) {
 	case 1:
 		return matches[0], nil
 	case 0:
-		return nil, fmt.Errorf("no se encontró un túnel '%s'", ref)
+		return nil, fmt.Errorf("tunnel '%s' not found", ref)
 	default:
-		return nil, fmt.Errorf("hay varios túneles llamados '%s'; usa el id", ref)
+		return nil, fmt.Errorf("multiple tunnels named '%s'; use the id", ref)
 	}
 }
 
@@ -184,13 +184,13 @@ func runTunnelCreate(cmd *cobra.Command, _ []string) error {
 	var name, openHint string
 
 	if tunReverse {
-		// Túnel reverse (Tipo 2): el VPS (source) abre un puerto público y reenvía a un
-		// servicio local del usuario, al que el CLI (dest) hace el dial.
+		// Reverse tunnel (Type 2): the VPS (source) opens a public port and forwards to a
+		// local service of the user, which the CLI (dest) dials.
 		if tunVPSPort == 0 {
-			return fmt.Errorf("--vps-port es requerido para --reverse")
+			return fmt.Errorf("--vps-port is required for --reverse")
 		}
 		if tunTo == "" {
-			return fmt.Errorf("--to es requerido para --reverse (servicio local a exponer)")
+			return fmt.Errorf("--to is required for --reverse (local service to expose)")
 		}
 		host, port, err := parseHostPort(tunTo)
 		if err != nil {
@@ -213,9 +213,9 @@ func runTunnelCreate(cmd *cobra.Command, _ []string) error {
 		}
 		openHint = fmt.Sprintf("auranode tunnel expose %s", name)
 	} else {
-		// Túnel local (Tipo 1): el CLI escucha y reenvía a un servicio del VPS.
+		// Local tunnel (Type 1): the CLI listens and forwards to a VPS service.
 		if tunRemotePort == 0 {
-			return fmt.Errorf("--remote-port es requerido")
+			return fmt.Errorf("--remote-port is required")
 		}
 		local := tunLocalPort
 		if local == 0 {
@@ -245,11 +245,11 @@ func runTunnelCreate(cmd *cobra.Command, _ []string) error {
 	if format == output.FormatJSON {
 		return output.JSON(created)
 	}
-	fmt.Printf("Túnel '%s' creado. Ábrelo con:\n  %s\n", name, openHint)
+	fmt.Printf("Tunnel '%s' created. Open it with:\n  %s\n", name, openHint)
 	return nil
 }
 
-// parseHostPort acepta "host:port" o sólo "port" (host por defecto 127.0.0.1).
+// parseHostPort accepts "host:port" or just "port" (host defaults to 127.0.0.1).
 func parseHostPort(s string) (string, int, error) {
 	host := "127.0.0.1"
 	portStr := s
@@ -262,7 +262,7 @@ func parseHostPort(s string) (string, int, error) {
 	}
 	port, err := strconv.Atoi(portStr)
 	if err != nil || port < 1 || port > 65535 {
-		return "", 0, fmt.Errorf("dirección inválida '%s': usa host:port o port", s)
+		return "", 0, fmt.Errorf("invalid address '%s': use host:port or port", s)
 	}
 	return host, port, nil
 }
@@ -286,7 +286,7 @@ func runTunnelOpen(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if tstr(t, "type") != "local" {
-		return fmt.Errorf("solo se pueden abrir túneles de tipo 'local' desde el CLI (este es '%s')", tstr(t, "type"))
+		return fmt.Errorf("only 'local' tunnels can be opened from the CLI (this one is '%s')", tstr(t, "type"))
 	}
 	tunnelID := tstr(t, "id")
 
@@ -307,17 +307,17 @@ func runTunnelOpen(cmd *cobra.Command, args []string) error {
 	defer stop()
 
 	onReady := func(lp, rp int, rh string) {
-		fmt.Printf("✔ Túnel '%s' abierto.\n", tstr(t, "name"))
-		fmt.Printf("  Escuchando en  127.0.0.1:%d\n", localPort)
-		fmt.Printf("  Reenviando a   %s:%d (vía %s)\n", rh, rp, tstr(t, "name"))
-		fmt.Printf("  Ejemplo:       mysql -h 127.0.0.1 -P %d -u <user> -p\n", localPort)
-		fmt.Println("  Ctrl+C para cerrar.")
+		fmt.Printf("✔ Tunnel '%s' open.\n", tstr(t, "name"))
+		fmt.Printf("  Listening on   127.0.0.1:%d\n", localPort)
+		fmt.Printf("  Forwarding to  %s:%d (via %s)\n", rh, rp, tstr(t, "name"))
+		fmt.Printf("  Example:       mysql -h 127.0.0.1 -P %d -u <user> -p\n", localPort)
+		fmt.Println("  Ctrl+C to close.")
 	}
 
 	if err := tc.Run(ctx, onReady); err != nil {
 		return err
 	}
-	fmt.Println("\nTúnel cerrado.")
+	fmt.Println("\nTunnel closed.")
 	return nil
 }
 
@@ -339,13 +339,13 @@ func runTunnelExpose(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	// Reverse dest=CLI: type=remote SIN agente destino (el dest es este CLI).
+	// Reverse dest=CLI: type=remote WITHOUT a destination agent (the dest is this CLI).
 	if tstr(t, "type") != "remote" || tstr(t, "dest_agent_id") != "" {
-		return fmt.Errorf("solo se pueden exponer túneles reverse (type 'remote' sin VPS destino); este es '%s'", tstr(t, "type"))
+		return fmt.Errorf("only reverse tunnels can be exposed (type 'remote' without a destination VPS); this one is '%s'", tstr(t, "type"))
 	}
 	tunnelID := tstr(t, "id")
 
-	// Servicio local a exponer: --to lo sobreescribe; si no, el host:port guardado.
+	// Local service to expose: --to overrides it; otherwise the saved host:port.
 	dialAddr := ""
 	if tunTo != "" {
 		host, port, err := parseHostPort(tunTo)
@@ -370,16 +370,16 @@ func runTunnelExpose(cmd *cobra.Command, args []string) error {
 		if target == "" {
 			target = fmt.Sprintf("%s:%d", localHost, localPort)
 		}
-		fmt.Printf("✔ Túnel reverse '%s' abierto.\n", tstr(t, "name"))
-		fmt.Printf("  Puerto público en el VPS:  :%d\n", vpsPort)
-		fmt.Printf("  Reenviando a tu servicio:  %s\n", target)
-		fmt.Println("  Ctrl+C para cerrar.")
+		fmt.Printf("✔ Reverse tunnel '%s' open.\n", tstr(t, "name"))
+		fmt.Printf("  Public port on the VPS:    :%d\n", vpsPort)
+		fmt.Printf("  Forwarding to your service: %s\n", target)
+		fmt.Println("  Ctrl+C to close.")
 	}
 
 	if err := tc.Run(ctx, onReady); err != nil {
 		return err
 	}
-	fmt.Println("\nTúnel cerrado.")
+	fmt.Println("\nTunnel closed.")
 	return nil
 }
 
@@ -399,6 +399,6 @@ func runTunnelRm(cmd *cobra.Command, args []string) error {
 	if err := c.Delete("/tunnels/"+tstr(t, "id"), nil); err != nil {
 		return err
 	}
-	fmt.Printf("Túnel '%s' eliminado.\n", tstr(t, "name"))
+	fmt.Printf("Tunnel '%s' deleted.\n", tstr(t, "name"))
 	return nil
 }

@@ -1,5 +1,5 @@
-// Package client es un cliente HTTP minimalista para la API de AuraNode.
-// Añade el bearer token, normaliza errores de la API y decodifica JSON.
+// Package client is a minimal HTTP client for the AuraNode API.
+// It adds the bearer token, normalizes API errors and decodes JSON.
 package client
 
 import (
@@ -13,12 +13,12 @@ import (
 )
 
 type Client struct {
-	baseURL string // p.ej. https://api.auranode.app
+	baseURL string // e.g. https://api.auranode.app
 	token   string
 	http    *http.Client
 }
 
-// New crea un cliente. baseURL puede o no incluir el sufijo /api/v1.
+// New creates a client. baseURL may or may not include the /api/v1 suffix.
 func New(baseURL, token string) *Client {
 	baseURL = strings.TrimRight(baseURL, "/")
 	baseURL = strings.TrimSuffix(baseURL, "/api/v1")
@@ -29,7 +29,7 @@ func New(baseURL, token string) *Client {
 	}
 }
 
-// APIError representa un error devuelto por la API ({error, message}).
+// APIError represents an error returned by the API ({error, message}).
 type APIError struct {
 	Status  int
 	Code    string `json:"error"`
@@ -46,8 +46,8 @@ func (e *APIError) Error() string {
 	return fmt.Sprintf("HTTP %d", e.Status)
 }
 
-// Do ejecuta una petición a /api/v1<path>; si body != nil se envía como JSON.
-// out (puntero) recibe la respuesta decodificada si no es nil.
+// Do performs a request to /api/v1<path>; if body != nil it is sent as JSON.
+// out (pointer) receives the decoded response if not nil.
 func (c *Client) Do(method, path string, body, out any) error {
 	var reader io.Reader
 	if body != nil {
@@ -72,7 +72,7 @@ func (c *Client) Do(method, path string, body, out any) error {
 
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return fmt.Errorf("no se pudo contactar el backend: %w", err)
+		return fmt.Errorf("could not reach the backend: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -86,7 +86,7 @@ func (c *Client) Do(method, path string, body, out any) error {
 
 	if out != nil && len(data) > 0 {
 		if err := json.Unmarshal(data, out); err != nil {
-			return fmt.Errorf("respuesta inesperada del backend: %w", err)
+			return fmt.Errorf("unexpected response from the backend: %w", err)
 		}
 	}
 	return nil

@@ -9,13 +9,13 @@ import (
 func init() {
 	configCmd := &cobra.Command{
 		Use:   "config",
-		Short: "Ver y cambiar la configuración del CLI",
+		Short: "View and change the CLI configuration",
 		RunE:  runConfigShow,
 	}
 
 	setCmd := &cobra.Command{
-		Use:   "set <api-url|format> <valor>",
-		Short: "Cambiar un ajuste (api-url, format)",
+		Use:   "set <api-url|format> <value>",
+		Short: "Change a setting (api-url, format)",
 		Args:  cobra.ExactArgs(2),
 		RunE:  runConfigSet,
 	}
@@ -30,9 +30,9 @@ func runConfigShow(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 	p := cfg.Profile(flagProfile)
-	fmt.Printf("Perfil por defecto: %s\n", cfg.DefaultProfile)
-	fmt.Printf("Formato:            %s\n", cfg.DefaultFormat)
-	fmt.Printf("Backend (perfil):   %s\n", p.APIURL)
+	fmt.Printf("Default profile: %s\n", cfg.DefaultProfile)
+	fmt.Printf("Format:         %s\n", cfg.DefaultFormat)
+	fmt.Printf("Backend (profile): %s\n", p.APIURL)
 	return nil
 }
 
@@ -49,15 +49,15 @@ func runConfigSet(cmd *cobra.Command, args []string) error {
 		cfg.SetProfile(flagProfile, p)
 	case "format":
 		if val != "table" && val != "json" {
-			return fmt.Errorf("formato inválido %q (usa: table, json)", val)
+			return fmt.Errorf("invalid format %q (use: table, json)", val)
 		}
 		cfg.DefaultFormat = val
 	default:
-		return fmt.Errorf("ajuste desconocido %q (usa: api-url, format)", key)
+		return fmt.Errorf("unknown setting %q (use: api-url, format)", key)
 	}
 	if err := cfg.Save(); err != nil {
 		return err
 	}
-	fmt.Printf("Ajuste %s actualizado.\n", key)
+	fmt.Printf("Setting %s updated.\n", key)
 	return nil
 }

@@ -1,4 +1,4 @@
-// Command auranode es el CLI del panel AuraNode.
+// Command auranode is the CLI for the AuraNode panel.
 package main
 
 import (
@@ -7,7 +7,7 @@ import (
 	"github.com/koyere/auranode-cli/cmd"
 )
 
-// version se sobreescribe en build con -ldflags "-X main.version=X.Y.Z".
+// version is overridden at build time with -ldflags "-X main.version=X.Y.Z".
 var version = "dev"
 
 func main() {

@@ -1,11 +1,11 @@
-// Package tunnel implementa los dos extremos de un túnel del CLI sobre un WebSocket al
-// backend, con el mismo manejo de half-close, drenado y reset ante saturación que el
-// agente:
-//   - rol source (Tipo 1, local): abre un listener TCP en la máquina del usuario y
-//     multiplexa cada conexión hacia el agente destino, que hace el dial.
-//   - rol dest (Tipo 2 reverse): el agente source abre el listener público en el VPS y
-//     el backend relaya cada conexión entrante al CLI, que hace el dial a un servicio
-//     local del usuario (caso ngrok/webhooks). Es el espejo del rol dest del agente.
+// Package tunnel implements both ends of a CLI tunnel over a WebSocket to the
+// backend, with the same half-close, draining and reset-on-saturation handling as the
+// agent:
+//   - source role (Type 1, local): opens a TCP listener on the user machine and
+//     multiplexes each connection to the destination agent, which dials.
+//   - dest role (Type 2 reverse): the source agent opens the public listener on the VPS
+//     and the backend relays each incoming connection to the CLI, which dials a local
+//     service of the user (ngrok/webhooks case). It mirrors the agent dest role.
 package tunnel
 
 import (
@@ -26,7 +26,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// Tipos de mensaje del protocolo de túneles (sincronizados con el backend).
+// Tunnel protocol message types (kept in sync with the backend).
 const (
 	typeTunnelOpen    = "tunnel_open"
 	typeTunnelOpenAck = "tunnel_open_ack"
@@ -43,9 +43,9 @@ const (
 	inboxBuffer = 2048
 	writeWait   = 10 * time.Second
 	pongWait    = 70 * time.Second
-	// windowSize: créditos iniciales (bytes en vuelo) por stream y dirección. Mismo
-	// control de flujo que el agente: el emisor no lee más allá de la ventana sin
-	// crédito; el receptor concede crédito (tunnel_window) al drenar.
+	// windowSize: initial credits (in-flight bytes) per stream and direction. Same
+	// flow control as the agent: the sender does not read beyond the window without
+	// credit; the receiver grants credit (tunnel_window) as it drains.
 	windowSize = 256 * 1024
 )
 
@@ -56,30 +56,30 @@ type msg struct {
 	Data       string `json:"data,omitempty"`
 	Error      string `json:"error,omitempty"`
 	OK         bool   `json:"ok,omitempty"`
-	FC         bool   `json:"fc,omitempty"`         // capacidad de control de flujo (open/open_ack)
-	Host       string `json:"host,omitempty"`       // backend→dest: a dónde hacer el dial
+	FC         bool   `json:"fc,omitempty"`         // flow-control capability (open/open_ack)
+	Host       string `json:"host,omitempty"`       // backend→dest: where to dial
 	Port       int    `json:"port,omitempty"`       // backend→dest
 	LocalPort  int    `json:"local_port,omitempty"` // tunnel_ready
 	RemoteHost string `json:"remote_host,omitempty"`
 	RemotePort int    `json:"remote_port,omitempty"`
-	Bytes      int    `json:"bytes,omitempty"` // tunnel_window: crédito concedido
+	Bytes      int    `json:"bytes,omitempty"` // tunnel_window: granted credit
 	Timestamp  int64  `json:"timestamp,omitempty"`
 }
 
-// role distingue el papel del CLI dentro del túnel.
+// role distinguishes the CLI role within the tunnel.
 type role int
 
 const (
-	roleSource role = iota // Tipo 1: el CLI escucha localmente
-	roleDest               // Tipo 2 reverse: el CLI hace el dial al servicio local
+	roleSource role = iota // Type 1: the CLI listens locally
+	roleDest               // Type 2 reverse: the CLI dials the local service
 )
 
-// Client mantiene la sesión de un túnel del CLI.
+// Client holds the session of a CLI tunnel.
 type Client struct {
 	tunnelID string
 	role     role
-	// localAddr (source): dirección donde escuchar localmente.
-	// dialAddr  (dest):   dirección del servicio local a la que hacer el dial.
+	// localAddr (source): address to listen on locally.
+	// dialAddr  (dest):   address of the local service to dial.
 	localAddr string
 	dialAddr  string
 	logf      func(format string, a ...any)
@@ -108,7 +108,7 @@ type stream struct {
 	readDone  bool
 	writeDone bool
 
-	fc         bool // ambos extremos soportan créditos → gating activo
+	fc         bool // both ends support credits → gating active
 	creditMu   sync.Mutex
 	creditCond *sync.Cond
 	sendCredit int
@@ -130,14 +130,14 @@ func (s *stream) closeInbox() {
 	s.inboxOnce.Do(func() { s.inboxClosed.Store(true); close(s.inbox) })
 }
 
-// initFlow inicializa el control de flujo con la ventana completa.
+// initFlow initializes flow control with the full window.
 func (s *stream) initFlow() {
 	s.creditCond = sync.NewCond(&s.creditMu)
 	s.sendCredit = windowSize
 }
 
-// takeCredit bloquea hasta que haya crédito (o el stream termine) y reserva hasta
-// `max` bytes. Devuelve 0 si el stream está cerrado.
+// takeCredit blocks until there is credit (or the stream ends) and reserves up to
+// `max` bytes. Returns 0 if the stream is closed.
 func (s *stream) takeCredit(max int) int {
 	s.creditMu.Lock()
 	defer s.creditMu.Unlock()
@@ -169,8 +169,8 @@ func (s *stream) addCredit(n int) {
 	s.creditCond.Broadcast()
 }
 
-// New crea un cliente rol source (Tipo 1): escucha en localAddr y reenvía al agente.
-// apiURL es la URL HTTP de la API (con o sin /api/v1).
+// New creates a source-role client (Type 1): listens on localAddr and forwards to the agent.
+// apiURL is the API HTTP URL (with or without /api/v1).
 func New(apiURL, token, tunnelID, localAddr string, logf func(string, ...any)) (*Client, error) {
 	conn, err := dialTunnel(apiURL, token, tunnelID)
 	if err != nil {
@@ -187,8 +187,8 @@ func New(apiURL, token, tunnelID, localAddr string, logf func(string, ...any)) (
 	}, nil
 }
 
-// NewDest crea un cliente rol dest (Tipo 2 reverse): por cada conexión que el backend
-// relaya, hace el dial al servicio local en dialAddr.
+// NewDest creates a dest-role client (Type 2 reverse): for each connection the backend
+// relays, it dials the local service at dialAddr.
 func NewDest(apiURL, token, tunnelID, dialAddr string, logf func(string, ...any)) (*Client, error) {
 	conn, err := dialTunnel(apiURL, token, tunnelID)
 	if err != nil {
@@ -205,7 +205,7 @@ func NewDest(apiURL, token, tunnelID, dialAddr string, logf func(string, ...any)
 	}, nil
 }
 
-// dialTunnel abre el WebSocket autenticado al endpoint de túneles del backend.
+// dialTunnel opens the authenticated WebSocket to the backend tunnel endpoint.
 func dialTunnel(apiURL, token, tunnelID string) (*websocket.Conn, error) {
 	wsURL, err := wsTunnelURL(apiURL, token, tunnelID)
 	if err != nil {
@@ -215,15 +215,15 @@ func dialTunnel(apiURL, token, tunnelID string) (*websocket.Conn, error) {
 	conn, resp, err := dialer.Dial(wsURL, http.Header{})
 	if err != nil {
 		if resp != nil {
-			return nil, fmt.Errorf("no se pudo abrir la sesión (HTTP %d): %w", resp.StatusCode, err)
+			return nil, fmt.Errorf("could not open the session (HTTP %d): %w", resp.StatusCode, err)
 		}
-		return nil, fmt.Errorf("no se pudo conectar al backend: %w", err)
+		return nil, fmt.Errorf("could not connect to the backend: %w", err)
 	}
 	return conn, nil
 }
 
-// Run abre el listener local y relaya hasta que ctx se cancela, el backend cierra la
-// sesión (tunnel_stop) o el WebSocket cae. Llama a onReady cuando la sesión queda lista.
+// Run opens the local listener and relays until ctx is canceled, the backend closes the
+// session (tunnel_stop) or the WebSocket drops. Calls onReady once the session is ready.
 func (c *Client) Run(ctx context.Context, onReady func(localPort, remotePort int, remoteHost string)) error {
 	defer c.conn.Close()
 
@@ -236,7 +236,7 @@ func (c *Client) Run(ctx context.Context, onReady func(localPort, remotePort int
 
 	go c.pinger(ctx)
 
-	// Esperar tunnel_ready antes de abrir el listener.
+	// Wait for tunnel_ready before opening the listener.
 	readErr := make(chan error, 1)
 	go c.readLoop(readErr)
 
@@ -250,15 +250,15 @@ func (c *Client) Run(ctx context.Context, onReady func(localPort, remotePort int
 			onReady(ready.LocalPort, ready.RemotePort, ready.RemoteHost)
 		}
 	case <-time.After(ackTimeout):
-		return fmt.Errorf("el backend no confirmó la sesión a tiempo")
+		return fmt.Errorf("the backend did not confirm the session in time")
 	}
 
-	// Rol source: abrir el listener local y aceptar conexiones. Rol dest: no hay
-	// listener local — el dial lo dispara cada tunnel_open que llega por readLoop.
+	// Source role: open the local listener and accept connections. Dest role: there is no
+	// local listener — the dial is triggered by each tunnel_open that arrives via readLoop.
 	if c.role == roleSource {
 		ln, err := net.Listen("tcp", c.localAddr)
 		if err != nil {
-			return fmt.Errorf("no se pudo abrir el puerto local %s: %w", c.localAddr, err)
+			return fmt.Errorf("could not open local port %s: %w", c.localAddr, err)
 		}
 		defer ln.Close()
 		go c.acceptLoop(ln)
@@ -311,10 +311,10 @@ func (c *Client) sourceStream(s *stream) {
 	}
 }
 
-// openDest (rol dest) hace el dial al servicio local y, si tiene éxito, arranca el relay.
-// Prioriza dialAddr (--to del usuario); si está vacío usa el host:port del tunnel_open
-// (los valores remote_host/remote_port guardados en el túnel). peerFC indica si el
-// source soporta control de flujo (el gating se activa sólo si ambos lo soportan).
+// openDest (dest role) dials the local service and, on success, starts the relay.
+// It prefers dialAddr (the user --to); if empty it uses the host:port from tunnel_open
+// (the remote_host/remote_port stored in the tunnel). peerFC indicates whether the
+// source supports flow control (gating is enabled only if both support it).
 func (c *Client) openDest(streamID, host string, port int, peerFC bool) {
 	addr := c.dialAddr
 	if addr == "" {
@@ -334,14 +334,14 @@ func (c *Client) openDest(streamID, host string, port int, peerFC bool) {
 	go func() {
 		conn, err := net.DialTimeout("tcp", addr, ackTimeout)
 		if err != nil {
-			c.logf("dial a %s falló: %v", addr, err)
+			c.logf("dial to %s failed: %v", addr, err)
 			c.send(msg{Type: typeTunnelOpenAck, TunnelID: c.tunnelID, StreamID: streamID, OK: false, Error: err.Error()})
 			c.unregister(streamID)
 			return
 		}
 		s.conn = conn
-		// FC: peerFC hace eco de la capacidad negociada (fallback limpio si el flag no
-		// llegó por un backend antiguo).
+		// FC: peerFC echoes the negotiated capability (clean fallback if the flag did not
+		// arrive from an older backend).
 		c.send(msg{Type: typeTunnelOpenAck, TunnelID: c.tunnelID, StreamID: streamID, OK: true, FC: peerFC})
 		c.relay(s)
 	}()
@@ -351,7 +351,7 @@ func (c *Client) readLoop(readErr chan<- error) {
 	for {
 		_, data, err := c.conn.ReadMessage()
 		if err != nil {
-			readErr <- nil // cierre normal del WS: fin de la sesión
+			readErr <- nil // normal WS close: end of session
 			return
 		}
 		c.conn.SetReadDeadline(time.Now().Add(pongWait))
@@ -367,7 +367,7 @@ func (c *Client) readLoop(readErr chan<- error) {
 			default:
 			}
 		case typeTunnelOpen:
-			// Sólo el rol dest recibe tunnel_open: hace el dial al servicio local.
+			// Only the dest role receives tunnel_open: it dials the local service.
 			if c.role == roleDest {
 				c.openDest(m.StreamID, m.Host, m.Port, m.FC)
 			}
@@ -383,7 +383,7 @@ func (c *Client) readLoop(readErr chan<- error) {
 		case typeTunnelWindow:
 			c.addCredit(m.StreamID, m.Bytes)
 		case typeTunnelStop:
-			readErr <- nil // el backend cerró el túnel
+			readErr <- nil // the backend closed the tunnel
 			return
 		}
 	}
@@ -397,7 +397,7 @@ func (c *Client) ack(streamID string, ok, peerFC bool) {
 		return
 	}
 	if ok {
-		s.fc = peerFC // se fija antes de cerrar ready (el relay arranca después)
+		s.fc = peerFC // set before closing ready (the relay starts afterwards)
 		safeClose(s.ready)
 	} else {
 		safeClose(s.failed)
@@ -409,13 +409,13 @@ func (c *Client) data(streamID string, b []byte) {
 	s := c.streams[streamID]
 	c.mu.Unlock()
 	if s == nil || s.inboxClosed.Load() {
-		return // stream cerrado en esta dirección: no enviar (evita panic)
+		return // stream closed in this direction: do not send (avoids panic)
 	}
 	select {
 	case <-s.done:
 	case s.inbox <- b:
 	default:
-		// Buffer saturado: resetear el stream (sin descartar bytes a media res).
+		// Buffer saturated: reset the stream (without dropping bytes mid-stream).
 		c.send(msg{Type: typeTunnelClose, TunnelID: c.tunnelID, StreamID: streamID, Error: "inbox overflow"})
 		s.abort()
 		c.unregister(streamID)
@@ -432,9 +432,9 @@ func (c *Client) addCredit(streamID string, bytes int) {
 	s.addCredit(bytes)
 }
 
-// closeStream cierra la dirección peer→local (half-close). NO elimina el stream del
-// mapa: la dirección local→peer puede seguir activa y necesita recibir créditos. El
-// stream se elimina vía markDone cuando ambas direcciones terminan.
+// closeStream closes the peer→local direction (half-close). It does NOT remove the stream
+// from the map: the local→peer direction may still be active and needs to receive credits.
+// The stream is removed via markDone once both directions finish.
 func (c *Client) closeStream(streamID string) {
 	c.mu.Lock()
 	s := c.streams[streamID]
@@ -445,7 +445,7 @@ func (c *Client) closeStream(streamID string) {
 }
 
 func (c *Client) relay(s *stream) {
-	// Escritor (peer→local): inbox → conn; ante EOF ordenado, drenar y half-close.
+	// Writer (peer→local): inbox → conn; on orderly EOF, drain and half-close.
 	go func() {
 		for {
 			select {
@@ -466,7 +466,7 @@ func (c *Client) relay(s *stream) {
 					c.unregister(s.streamID)
 					return
 				}
-				// Conceder crédito al emisor opuesto: ya drenamos len(b).
+				// Grant credit to the opposite sender: we already drained len(b).
 				if s.fc {
 					c.send(msg{Type: typeTunnelWindow, TunnelID: c.tunnelID, StreamID: s.streamID, Bytes: len(b)})
 				}
@@ -474,16 +474,16 @@ func (c *Client) relay(s *stream) {
 		}
 	}()
 
-	// Lector (local→peer): conn → tunnel_data. Con control de flujo (s.fc) espera crédito
-	// antes de leer → backpressure al origen si el receptor opuesto va lento. Sin fc (peer
-	// antiguo) lee libremente. Al ver EOF señala el fin de la dirección.
+	// Reader (local→peer): conn → tunnel_data. With flow control (s.fc) it waits for credit
+	// before reading → backpressure to the origin if the opposite receiver is slow. Without fc (older
+	// peer) it reads freely. On EOF it signals the end of the direction.
 	buf := make([]byte, relayBuf)
 	for {
 		budget := len(buf)
 		if s.fc {
 			budget = s.takeCredit(len(buf))
 			if budget == 0 {
-				return // stream cerrado mientras esperaba crédito
+				return // stream closed while waiting for credit
 			}
 		}
 		n, err := s.conn.Read(buf[:budget])
@@ -577,13 +577,13 @@ func (c *Client) pinger(ctx context.Context) {
 	}
 }
 
-// wsTunnelURL convierte la URL HTTP de la API en la URL WSS del endpoint de túneles.
+// wsTunnelURL converts the API HTTP URL into the WSS URL of the tunnel endpoint.
 func wsTunnelURL(apiURL, token, tunnelID string) (string, error) {
 	apiURL = strings.TrimRight(apiURL, "/")
 	apiURL = strings.TrimSuffix(apiURL, "/api/v1")
 	u, err := url.Parse(apiURL)
 	if err != nil {
-		return "", fmt.Errorf("api-url inválida: %w", err)
+		return "", fmt.Errorf("invalid api-url: %w", err)
 	}
 	switch u.Scheme {
 	case "https":
@@ -591,7 +591,7 @@ func wsTunnelURL(apiURL, token, tunnelID string) (string, error) {
 	case "http":
 		u.Scheme = "ws"
 	default:
-		return "", fmt.Errorf("esquema no soportado en api-url: %s", u.Scheme)
+		return "", fmt.Errorf("unsupported scheme in api-url: %s", u.Scheme)
 	}
 	u.Path = "/ws/tunnel"
 	q := url.Values{}
