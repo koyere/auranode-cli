@@ -207,12 +207,12 @@ func NewDest(apiURL, token, tunnelID, dialAddr string, logf func(string, ...any)
 
 // dialTunnel opens the authenticated WebSocket to the backend tunnel endpoint.
 func dialTunnel(apiURL, token, tunnelID string) (*websocket.Conn, error) {
-	wsURL, err := wsTunnelURL(apiURL, token, tunnelID)
+	wsURL, err := wsTunnelURL(apiURL, tunnelID)
 	if err != nil {
 		return nil, err
 	}
 	dialer := websocket.Dialer{HandshakeTimeout: 15 * time.Second}
-	conn, resp, err := dialer.Dial(wsURL, http.Header{})
+	conn, resp, err := dialer.Dial(wsURL, http.Header{"Authorization": []string{"Bearer " + token}})
 	if err != nil {
 		if resp != nil {
 			return nil, fmt.Errorf("could not open the session (HTTP %d): %w", resp.StatusCode, err)
@@ -578,7 +578,7 @@ func (c *Client) pinger(ctx context.Context) {
 }
 
 // wsTunnelURL converts the API HTTP URL into the WSS URL of the tunnel endpoint.
-func wsTunnelURL(apiURL, token, tunnelID string) (string, error) {
+func wsTunnelURL(apiURL, tunnelID string) (string, error) {
 	apiURL = strings.TrimRight(apiURL, "/")
 	apiURL = strings.TrimSuffix(apiURL, "/api/v1")
 	u, err := url.Parse(apiURL)
@@ -596,8 +596,10 @@ func wsTunnelURL(apiURL, token, tunnelID string) (string, error) {
 	u.Path = "/ws/tunnel"
 	q := url.Values{}
 	q.Set("tunnel", tunnelID)
-	q.Set("token", token)
 	u.RawQuery = q.Encode()
+	// The token is NOT sent in the query string, where proxy access logs would record
+	// it. The CLI is not a browser and can set headers, so dialTunnel sends it in the
+	// Authorization header instead.
 	return u.String(), nil
 }
 

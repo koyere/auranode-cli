@@ -3,6 +3,15 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/) and
 [SemVer](https://semver.org/).
 
+## [1.1.3] — 2026-11-19
+
+### Security
+- The tunnel session token is now sent in the `Authorization` header instead of the
+  WebSocket URL query string, so it can no longer end up in proxy access logs.
+- Build and release with Go 1.27.4 and update `cobra`, `golang.org/x/term` and the other
+  modules to their latest versions. `govulncheck` reports no known vulnerabilities.
+- The release workflow runs on the current major versions of its GitHub Actions.
+
 ## [1.1.2] — 2026-06-22
 
 ### Changed
